@@ -4,6 +4,24 @@
 /*  Astrophysic Science Archive Research Center (HEASARC) at the NASA      */
 /*  Goddard Space Flight Center.                                           */
 
+
+int fits_pdc_init(void);
+
+int fits_pdc_setoptions(int options);
+
+int fits_pdc_getoptions(int *options);
+
+int fits_pdc_getversion(int *version);
+
+int fits_pdc_shutdown(void);
+
+int fits_pdc_truncate(int handle, LONGLONG filesize);
+
+int fits_pdc_remove(char *filename);
+
+int fits_pdc_checkfile (char *urltype, char *infile, char *outfile);
+
+
 /*
  * open an existing file
  */

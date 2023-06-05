@@ -1324,6 +1324,9 @@ int compress2file_from_mem(
 #include "drvrsmem.h"
 #endif
 
+// TODO: CHEN define "HAVE_PDC_SERVICES"
+#include "drvrpdc.h"
+
 /* A hack for nonunix machines, which lack strcasecmp and strncasecmp */
 /* these functions are in fitscore.c */
 int fits_strcasecmp (const char *s1, const char *s2       );

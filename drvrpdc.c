@@ -8,9 +8,52 @@
 #include <stdlib.h>
 #include "fitsio2.h"
 
-/**********************************************************************/
-/*******          driver routines for pdc//:                   ********/
-/**********************************************************************/
+
+int fits_pdc_init(void)
+{
+    for(int i = 0; i < NMAXFILES; i++) /* initialize all empty slots in table */
+    {
+        //handleTable[ii].fileptr = 0;
+    }
+    return 0;
+}
+
+int fits_pdc_setoptions(int options)
+{
+    options = 0;
+    return 0;
+}
+
+int fits_pdc_getoptions(int *options)
+{
+    *options = 0;
+    return 0;
+}
+int fits_pdc_getversion(int *version)
+{
+    *version = 99;
+    return 0;
+}
+
+int fits_pdc_shutdown(void)
+{
+    return 0;
+}
+
+int fits_pdc_truncate(int handle, LONGLONG filesize)
+{
+    return 0;
+}
+
+int fits_pdc_remove(char *filename)
+{
+    return 0;
+}
+
+int fits_pdc_checkfile (char *urltype, char *infile, char *outfile)
+{
+    return 0;
+}
 
 /*
  * open an existing file

@@ -5296,6 +5296,32 @@ int fits_init_cfitsio(void)
         FFUNLOCK;
         return(status);
     }
+
+    /* 32--------------------disk file driver-----------------------*/
+    status = fits_register_driver("pdc://", 
+            fits_pdc_init,
+            fits_pdc_shutdown,
+            fits_pdc_setoptions,
+            fits_pdc_getoptions, 
+            fits_pdc_getversion,
+            fits_pdc_checkfile,
+            fits_pdc_open,
+            fits_pdc_create,
+            fits_pdc_truncate,
+            fits_pdc_close,
+            fits_pdc_remove,
+            fits_pdc_size,
+            fits_pdc_flush,
+            fits_pdc_seek,
+            fits_pdc_read,
+            fits_pdc_write);
+
+    if (status)
+    {
+        ffpmsg("failed to register the file:// driver (init_cfitsio)");
+        FFUNLOCK;
+        return(status);
+    }
 #endif
 
 
