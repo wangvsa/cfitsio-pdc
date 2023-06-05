@@ -101,3 +101,7 @@ __pycache__/
 #cmake
 build
 install
+
+cfitsio.pc
+libcfitsio.so.10
+libcfitsio.so.10.4.2.0
