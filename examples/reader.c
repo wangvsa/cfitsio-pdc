@@ -6,7 +6,7 @@ int main(int argc, char *argv[])
 {
     fitsfile *fptr;         
     char card[FLEN_CARD]; 
-    int status = 0,  nkeys, ii;  /* MUST initialize status */
+    int status = 0, nkeys, ii;  /* MUST initialize status */
 
     fits_open_file(&fptr, "pdc://testfile.fits", READONLY, &status);
     fits_get_hdrspace(fptr, &nkeys, NULL, &status);

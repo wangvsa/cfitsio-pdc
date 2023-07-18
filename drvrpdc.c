@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "fitsio2.h"
+#include <stdarg.h>
 #include "pdc.h"
 
 /*
@@ -45,7 +46,6 @@ static pdcid_t cont_id;
 static int current_handle;
 static bool mpi_init_by_pdc;
 
-
 typedef struct fits_pdc_obj {
     char*    obj_name;
     pdcid_t  obj_id;
@@ -56,10 +56,8 @@ typedef struct fits_pdc_obj {
 fits_pdc_obj_t handle_table[NMAXFILES];
 
 
-int fits_pdc_init(void)
+void _pdc_client_init()
 {
-    LOGDBG("init");
-
     int flag;
     MPI_Initialized(&flag);
     if (!flag) {
@@ -72,6 +70,27 @@ int fits_pdc_init(void)
     pdc_id    = PDCinit("pdc");
     cont_prop = PDCprop_create(PDC_CONT_CREATE, pdc_id);
     cont_id   = PDCcont_create_col("c1", cont_prop);
+}
+
+void _pdc_client_fini()
+{
+    PDCcont_close(cont_id);
+    PDCprop_close(cont_prop);
+    PDCclose(pdc_id);
+
+    if (mpi_init_by_pdc) {
+        MPI_Finalize();
+    }
+}
+
+/* shutdown function is never called by
+ * cfistio library, maybe a bug in their
+ * library. so we connect/close pdc server
+ * connection at open(create) and close time.
+ */
+int fits_pdc_init(void)
+{
+    LOGDBG("init, max files: %d", NMAXFILES);
 
     for(int i = 0; i < NMAXFILES; i++) {
         // initialize all empty slots in table
@@ -80,6 +99,8 @@ int fits_pdc_init(void)
         handle_table[i].obj_prop         = -1;
         handle_table[i].offset           = 0;
     }
+
+    _pdc_client_init();
     return 0;
 }
 
@@ -113,13 +134,6 @@ int fits_pdc_shutdown(void)
             free(obj->obj_name);
     }
 
-    PDCcont_close(cont_id);
-    PDCprop_close(cont_prop);
-    PDCclose(pdc_id);
-
-    if (mpi_init_by_pdc) {
-        MPI_Finalize();
-    }
     return 0;
 }
 
@@ -146,30 +160,41 @@ int fits_pdc_checkfile (char *urltype, char *infile, char *outfile)
  */
 int fits_pdc_open(char *filename, int rwmode, int *handle)
 {
-    LOGDBG("open %s", filename);
+    LOGDBG("open %s, current_handle: %d", filename, current_handle);
     *handle = -1;
     char *obj_name = filename;
-    for (int i = 0; i < NMAXFILES; i++) {
-        if (strcmp(obj_name, handle_table[i].obj_name) == 0) {
-            // found an existing object
-            *handle = i;
-            break;
+    for (int i = 0; i < current_handle; i++) {
+        if (handle_table[i].obj_name != NULL) {
+            if (strcmp(obj_name, handle_table[i].obj_name) == 0) {
+                LOGDBG("found existing object");
+                // found an existing object
+                *handle = i;
+                break;
+            }
         }
     }
 
-    if (*handle != -1) {
-        // open object
-        pdcid_t obj_id = PDCobj_open(obj_name, pdc_id);
-        if (obj_id == 0) {
-            LOGDBG("error when open object %s", obj_name);
-            return -1;
-        }
-        handle_table[*handle].obj_id      = obj_id;
-        return 0;
-    } else {
-        LOGDBG("object %s not found in handle table", obj_name);
+    pdcid_t obj_id = PDCobj_open(obj_name, pdc_id);
+    if (obj_id == 0) {
+        LOGDBG("error when open object %s", obj_name);
         return -1;
     }
+
+    if (*handle == -1) {
+        // object previously created by others
+        *handle = current_handle;
+        current_handle++;
+        LOGDBG("object %s not found in handle table, handle: %d", obj_name, *handle);
+
+        handle_table[*handle].obj_name = strdup(obj_name);
+        handle_table[*handle].obj_id   = obj_id;
+    } else {
+        // object previously created by me
+        LOGDBG("object %s found in handle table, handle: %d", obj_name, *handle);
+        handle_table[*handle].obj_id = obj_id;
+    }
+
+    return 0;
 }
 
 /*
@@ -178,6 +203,7 @@ int fits_pdc_open(char *filename, int rwmode, int *handle)
 int fits_pdc_create(char *filename, int *handle)
 {
     LOGDBG("create %s", filename);
+
     if (current_handle < NMAXFILES) {
         *handle = current_handle;
         current_handle++;
@@ -185,16 +211,20 @@ int fits_pdc_create(char *filename, int *handle)
         pdcid_t obj_id;
         pdcid_t obj_prop;
 
-        // First create the object property
+        // TODO get real dim
+        uint64_t dims[1] = {10*1024*1024};
+
+        // First create the object property, these two
+        // properties must be set before we can transfer
         obj_prop = PDCprop_create(PDC_OBJ_CREATE, pdc_id);
         PDCprop_set_obj_type(obj_prop, PDC_CHAR);
+        PDCprop_set_obj_dims(obj_prop, 1, dims);
 
         /* 
          * TODO:
          * We can retrive header info and setup more obj prop
          *
          uint64_t dims[NUM_DIMS] = {g_x_ept, g_y_ept};
-         PDCprop_set_obj_dims(obj_prop, NUM_DIMS, dims);
          PDCprop_set_obj_time_step(*obj_prop, 0);
          PDCprop_set_obj_user_id(*obj_prop, getuid());
          PDCprop_set_obj_app_name(*obj_prop, "cfitsio");
@@ -213,9 +243,10 @@ int fits_pdc_create(char *filename, int *handle)
         handle_table[*handle].obj_id   = obj_id;
         handle_table[*handle].obj_prop = obj_prop;
         return 0;
-    } else {
-        return -1;
     }
+
+    // exceeds max number of files
+    return -1;
 }
 
 int fits_pdc_size(int handle, LONGLONG *filesize)
@@ -238,13 +269,15 @@ int fits_pdc_close(int handle)
             PDCobj_close(obj->obj_id);
             obj->obj_id = -1;
         }
-        /* obj->obj_name is still kept in case
-         * we need to open the object later
-         */
+        // obj->obj_name is still kept in case
+        // we need to open the object later
     } else {
         // TODO
         // print error message
     }
+
+    _pdc_client_fini();
+
     return 0;
 }
 
@@ -258,14 +291,15 @@ int fits_pdc_flush(int handle)
 
 int fits_pdc_seek(int handle, LONGLONG offset)
 {
-    LOGDBG("flush %d, %ld", handle, offset);
-    handle_table[handle].offset = offset;
+    LOGDBG("seek %d, %ld", handle, offset);
+    //handle_table[handle].offset = offset;
     return 0;
 }
 
 int fits_pdc_read(int handle, void *buffer, long nbytes)
 {
-    LOGDBG("read %d, %ld bytes", handle, nbytes);
+    LOGDBG("read handle: %d, %ld bytes", handle, nbytes);
+
     pdcid_t local_region, global_region;
     pdcid_t transfer_id;
     fits_pdc_obj_t* obj = &(handle_table[handle]);
@@ -274,16 +308,29 @@ int fits_pdc_read(int handle, void *buffer, long nbytes)
     uint64_t global_offsets[1] = {obj->offset};
     uint64_t lengths[1]        = {(uint64_t) nbytes};
 
+    struct pdc_obj_info* info = PDCobj_get_info(obj->obj_id);
+    LOGDBG("obj id: %d, ndim: %d, local: %ld, global: %ld", obj->obj_id, info->obj_pt->ndim, 0, obj->offset);
+
+
+    void* data = malloc(sizeof(int) *  nbytes);
+
     local_region  = PDCregion_create(1, local_offsets,  lengths);
     global_region = PDCregion_create(1, global_offsets, lengths);
-    transfer_id   = PDCregion_transfer_create(buffer, PDC_READ, obj->obj_id,
-            local_region, global_region);
+    transfer_id   = PDCregion_transfer_create(data, PDC_READ, obj->obj_id,
+                                            local_region, global_region);
+    PDCregion_transfer_start(transfer_id);
+    PDCregion_transfer_wait(transfer_id);
+
+    memcpy(buffer, data, nbytes);
+    obj->offset += nbytes;
+
     return 0;
 }
 
 int fits_pdc_write(int handle, void *buffer, long nbytes)
 {
-    LOGDBG("write %d, %ld bytes", handle, nbytes);
+    LOGDBG("write handle: %d, %ld bytes, buffer=null?%d", handle, nbytes, buffer==NULL);
+
     pdcid_t local_region, global_region;
     pdcid_t transfer_id;
     fits_pdc_obj_t* obj = &(handle_table[handle]);
@@ -294,8 +341,11 @@ int fits_pdc_write(int handle, void *buffer, long nbytes)
 
     local_region  = PDCregion_create(1, local_offsets,  lengths);
     global_region = PDCregion_create(1, global_offsets, lengths);
-    transfer_id   = PDCregion_transfer_create(buffer, PDC_WRITE, obj->obj_id,
-            local_region, global_region);
+
+    void* data = malloc(sizeof(char) * nbytes);
+    memcpy(data, buffer, nbytes);
+    transfer_id   = PDCregion_transfer_create(data, PDC_WRITE, obj->obj_id,
+                                                local_region, global_region);
     PDCregion_transfer_start(transfer_id);
 
     // TODO:
@@ -304,5 +354,8 @@ int fits_pdc_write(int handle, void *buffer, long nbytes)
     // also need to make sure all transfers finished at
     // close time? consistency?
     PDCregion_transfer_wait(transfer_id);
+
+    obj->offset += nbytes;
+
     return 0;
 }
