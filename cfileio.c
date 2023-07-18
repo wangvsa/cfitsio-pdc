@@ -5296,6 +5296,7 @@ int fits_init_cfitsio(void)
         FFUNLOCK;
         return(status);
     }
+#endif // end of ifdef HAVE_NET_SERVICES
 
     /* 32--------------------disk file driver-----------------------*/
     status = fits_register_driver("pdc://", 
@@ -5322,7 +5323,6 @@ int fits_init_cfitsio(void)
         FFUNLOCK;
         return(status);
     }
-#endif
 
 
     /* reset flag.  Any other threads will now not need to call this routine */
