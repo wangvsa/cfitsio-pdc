@@ -559,6 +559,13 @@ if test "x$BZIP2_PATH" != x; then
    LIBS="$LIBS -L${BZIP2_PATH}/lib -lbz2"
 fi
 
+# PDC flags
+if test "x$PDC_DIR" != x; then
+   CFLAGS="$CFLAGS -I${PDC_DIR}/include"
+   LIBS="$LIBS -L${PDC_DIR}/lib -lpdc"
+fi
+
+
 AC_SUBST(ARCH)dnl
 AC_SUBST(CFLAGS)dnl
 AC_SUBST(CC)dnl

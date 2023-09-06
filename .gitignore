@@ -52,9 +52,9 @@ autom4te.cache
 /config.guess
 /config.h.in
 /config.log
-/config.status
+#/config.status
 /config.sub
-/configure
+#/configure
 /configure.scan
 /depcomp
 /install-sh
